@@ -3,3 +3,5 @@
 /.idea/
 /archive/
 /data_gen/
+/src/prm.egg-info/
+__pycache__/
