@@ -1,3 +1,3 @@
-from .base import base
+from .base import base, base_api
 from .cot import cot
 from .rw import rw

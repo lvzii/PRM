@@ -1,23 +1,27 @@
 from vllm import LLM, SamplingParams
 
 from src.prm.config import Config
+from src.prm.utils.api import aLLM
 
 
-PROMPT = """{}  
-"""
+ANSWER_REQUIREMENT = """Please answer me with the json format :{"buggy_code": "The buggy code in the systemverilog (just one line of code)", "correct_code": "The correct code (just one line of code that can directly replace the buggy code, without any other description)"}"""
 
 
 def base(x, config: Config, llm: LLM):
     """
     x: dataset's elements
     """
-    tokenizer = llm.get_tokenizer()
     convs = [
         [
-            {"role": "user", "content": PROMPT.format()},
+            {
+                "role": "user",
+                "content": i + ANSWER_REQUIREMENT,
+            }
         ]
-        for i in x
+        for i in x["question"]
     ]
+    tokenizer = llm.get_tokenizer()
+
     templated_convs = tokenizer.apply_chat_template(
         convs,
         tokenize=False,
@@ -33,5 +37,18 @@ def base(x, config: Config, llm: LLM):
         sampling_params=sampling_params,
         use_tqdm=False,
     )
+    x["response"] = responses
+    return x
+
+
+def base_api(x, config: Config, llm: aLLM):
+    responses = []
+    for i in x["question"]:
+        cur_response = []
+        for _ in range(config.infer_times):
+            response = llm.call(i + ANSWER_REQUIREMENT)
+            print(response)
+            cur_response.append(response)
+        responses.append(cur_response)
     x["response"] = responses
     return x
