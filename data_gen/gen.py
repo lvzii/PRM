@@ -21,9 +21,11 @@ from operator import itemgetter
 from collections import Counter
 from dataclasses import asdict, dataclass
 from sklearn.model_selection import train_test_split
+import traceback
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from utils.dataprocess import compare_golden
+from utils.split_cot import split_sentence4en
 
 
 @dataclass
@@ -73,8 +75,7 @@ Please analyse & solve this bug. Answer me the the json result
     "cot":"your analysis(Let's think step-by-step.Try not to have large pieces of code in your thoughts.)(Make sure you don't break the json format)",
     "bug_line": "bug_line",
     "fixed_line": "fixed_line"
-}}
-"""
+}}"""
 # GENERAGE_COT_PROMPT = """Help me fix bug in verilog/systemverilog.
 # <spec>
 # {spec}
@@ -146,10 +147,9 @@ def get_model_response(instruction):
 
 
 def construct_check_prompt(i):
-    question = i["question"]
     # ?AttributeError: 'dict' object has no attribute 'strip'
-    spec = re.findall("<spec>(.*)</spec>", question, re.S)[0].strip()
-    bug_code = re.findall("<bug_code>(.*)</bug_code>", question, re.S)[0].strip()
+    spec = i["spec"]
+    bug_code = i["buggy_code"]
     steps = []
     process = i["process"]
     for sdx, s in enumerate(process):
@@ -160,7 +160,19 @@ def construct_check_prompt(i):
     return prompt
 
 
-def parse_cot(response):
+def _parse_cot2process(cot, response_answer):
+    """
+    parse cot to process
+    """
+    sentences = split_sentence4en(cot)
+    chain = sentences + ["So, the final answer is\n" + json.dumps(response_answer)]
+    process = []
+    for each in chain:
+        process.append(asdict(Process(step=each, label="Unknown")))
+    return process
+
+
+def parse_response(response):
     """
     parse: llm generate cot step response
     """
@@ -170,15 +182,16 @@ def parse_cot(response):
         response_cot = response["cot"]
         response_bug_line = response["bug_line"]
         response_fixed_line = response["fixed_line"]
-        process = []
-        answer = ""
-        answer_is_correct = True
-        return (process, answer, answer_is_correct)
+        if type(response_bug_line) is not str or type(response_fixed_line) is not str:
+            return None
+        response_answer = {"bug_line": response_bug_line, "fixed_line": response_fixed_line}
+        process = _parse_cot2process(response_cot, response_answer)
+        return (process, response_answer, response_cot)
     except Exception as e:
-        print(e.__str__())
-        print(e.__traceback__)
+        # print(response)
+        # print(e.__str__())
+        # traceback.print_exc()
         return None
-    return data
 
 
 def parse_check(response):
@@ -191,8 +204,9 @@ def parse_check(response):
             data = json.loads(data)
             return data
         except Exception as e:
-            print(data)
-            print(e.__str__())
+            # print(data)
+            # print(e.__str__())
+            # traceback.print_exc()
             return None
     elif MODEL.startswith("llama"):
         try:
@@ -204,6 +218,7 @@ def parse_check(response):
         except Exception as e:
             # print(data)
             # print(e.__str__())
+            # traceback.print_exc()
             return None
     else:
         raise "must be qwen/llama"
@@ -226,7 +241,9 @@ def modify_process(v, i):
 
     process = i["process"]
     new_process = []
+    # todo check int rather than try except
     wrong_step = int(v["wrong_step"].lstrip("step "))
+    # wrong_step = int(wrong_step)
     for edx, each in enumerate(process):
         if edx + 1 != wrong_step:
             new_process.append(asdict(Process(step=each["step"], label="True")))
@@ -254,6 +271,7 @@ def check_answer_is_true(parsed_cot):
 def label():
     def check_func(i, tdx):
         step_label_save_path = f"{UNIT_RESPONSE_DIR}/{i["uid"]}-{tdx}.json"
+        # print("start check")
         # step 2 skip already success
         if Path(step_label_save_path).exists():
             # print(f"pass {i["uid"]}-{i["source"]}")
@@ -266,6 +284,7 @@ def label():
                 response = get_model_response(check_prompt).content
             except Exception as e:
                 print(e.__str__())
+                traceback.print_exc()
             # step 5 check llm response
             response = parse_check(response)
             if not response:
@@ -274,6 +293,7 @@ def label():
             try:  # json is json,but term is not correct # so step 5 parse is not completed
                 ok = parse_infer_result(response, i)
             except Exception as e:
+                traceback.print_exc()
                 continue
             if not ok:
                 continue
@@ -284,6 +304,7 @@ def label():
                 i["process"] = modify_process(response, i)
             except Exception as e:
                 print(e.__str__())
+                traceback.print_exc()
                 continue
             # step 8 save all info for debug
             nlpertools.save_to_json(i, step_label_save_path)
@@ -291,36 +312,47 @@ def label():
             break
 
     def func(i):
+        i["uid"] = f"{i["module_id"]}_{i["bug_id"]}"
         # step 1 generate cot
         for tdx in range(MAX_TRY_TIMES):
             # for generate cot, only 20 cots are generated
-            cot_save_path = f"{COT_DIR}/{i["module_id"]}_{i["bug_id"]}-{tdx}.json"
+            cot_save_path = f"{COT_DIR}/{i["uid"]}-{tdx}.json"
             if not Path(cot_save_path).exists():
                 # step 1.1 generate cot
-                cot = generate_cot(i)
+                response = generate_cot(i)
                 # step 1.2 parse cot
-                parsed_cot = parse_cot(cot)
+                parsed_cot = parse_response(response)
                 if not parsed_cot:
                     break
-                print(parsed_cot)
+                process, response_answer, response_cot = parsed_cot
                 # only format-correct response can be saved
                 # step 1.3 save cot
-                i["process"] = parsed_cot
-                # nlpertools.save_to_json(
-                #     i,
-                #     cot_save_path,
-                # )
+                i["process"] = process
+                i["response_answer"] = response_answer
+                i["response_cot"] = response_cot
+                i["answer_is_correct"] = compare_golden(
+                    response_answer["bug_line"],
+                    response_answer["fixed_line"],
+                    i["golden_answer"]["bug_line"],
+                    i["golden_answer"]["fixed_line"],
+                )
+                nlpertools.save_to_json(
+                    i,
+                    cot_save_path,
+                )
                 # step 1.4 check false cot
-                if check_answer_is_true(parsed_cot):
+                if i["answer_is_correct"]:
+                    # print("true")
                     continue
-            #     else:
-            #         check_func(i, tdx)
-            # else:
-            #     parsed_cot = nlpertools.load_from_json(cot_save_path)
-            #     if check_answer_is_true(parsed_cot):
-            #         continue
-            #     else:
-            #         check_func(i, tdx)
+                else:
+                    # print("false")
+                    check_func(i, tdx)
+            else:
+                i = nlpertools.load_from_json(cot_save_path)
+                if i["answer_is_correct"]:
+                    continue
+                else:
+                    check_func(i, tdx)
 
     nlpertools.j_mkdir(UNIT_RESPONSE_DIR)
     data = nlpertools.load_from_json(RAW_DATA)
@@ -411,8 +443,8 @@ if __name__ == "__main__":
         base_url=f"http://localhost:{API_PORT}/v1",
         api_key="0",
     )
-    MAX_TRY_TIMES = 5
-    MAX_WORKERS = 64
+    MAX_TRY_TIMES = 3
+    MAX_WORKERS = 32
     COT_DIR = f"processing/cot/{MODEL}"
     UNIT_RESPONSE_DIR = f"processing/label/{MODEL}"
     nlpertools.j_mkdir(COT_DIR)
