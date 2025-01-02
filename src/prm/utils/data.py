@@ -9,7 +9,9 @@ QUESTION_PROMPT = """Help me fix bug in verilog/systemverilog.
 Here is the code that is supposed to keep corresponding to the spec, but there is a bug in it:
 <bug_code>
 {bug_code}
-</bug_code>"""
+</bug_code>
+
+"""
 
 SYNTAX_PROMPT = """Help me fix bug in verilog/systemverilog.
 <spec>
@@ -22,11 +24,15 @@ Here is the code that is supposed to keep corresponding to the spec, but there i
 </bug_code>
 
 Here is iverilog's compilation error message:
-{syntax_log}"""
+<compile_log>
+{syntax_log}
+</compile_log>
+
+"""
 
 
 def _syntax(i):
-    prompt = QUESTION_PROMPT.format(spec=i["spec"], bug_code=i["buggy_code"], syntax_log=i["syntax_log"])
+    prompt = SYNTAX_PROMPT.format(spec=i["spec"], bug_code=i["buggy_code"], syntax_log=i["syntax_log"])
     i["question"] = prompt
     return i
 

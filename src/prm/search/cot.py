@@ -40,3 +40,7 @@ def cot(x, config: Config, llm: LLM):
     x["response"] = responses
 
     return x
+
+
+def cot_api():
+    pass

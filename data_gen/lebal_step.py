@@ -310,6 +310,6 @@ if __name__ == "__main__":
     UNIT_RESPONSE_DIR = f"data_process-{MODEL}"
     RAW_DATA = "../raw_data/false_cot.json"
 
-    label()
+    # label()
     # back_data_real_time()
-    # build_train_data()
+    build_train_data()

@@ -4,7 +4,7 @@ from src.prm.config import Config
 from src.prm.utils.api import aLLM
 
 
-ANSWER_REQUIREMENT = """Please answer me with the json format :{"buggy_code": "The buggy code in the systemverilog (just one line of code)", "correct_code": "The correct code (just one line of code that can directly replace the buggy code, without any other description)"}"""
+ANSWER_REQUIREMENT = """ """
 
 
 def base(x, config: Config, llm: LLM):
@@ -42,6 +42,9 @@ def base(x, config: Config, llm: LLM):
 
 
 def base_api(x, config: Config, llm: aLLM):
+    """
+    dataset
+    """
     responses = []
     for i in x["question"]:
         cur_response = []
