@@ -2,8 +2,8 @@
 /.vscode/
 /.idea/
 /archive/
-/data_gen/
 /src/prm.egg-info/
 __pycache__/
 /utils/
-/data_gen/*.py
+data_gen/
+!data_gen/*.py
