@@ -2,9 +2,9 @@ from openai import OpenAI
 
 
 class aLLM(object):
-    def __init__(self):
+    def __init__(self, api_port):
         self.client = OpenAI(
-            base_url="http://localhost:8000/v1",
+            base_url=f"http://localhost:{api_port}/v1",
             api_key="0",
         )
 

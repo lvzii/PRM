@@ -42,13 +42,19 @@ def _function(i):
     return i
 
 
-def get_dataset(dataset_name):
+def get_dataset(dataset_name, config):
     prompn_fn = {"syntax": _syntax, "function": _function}[dataset_name]
-    data_file = {"syntax": "verilog-machine-syntax-test.json", "function": "verilog-machine-test.json"}[dataset_name]
+    data_file = {
+        "syntax": "./dataset/verilog-machine-syntax-test.json",
+        "function": "./dataset/verilog-machine-function-test.json",
+    }[dataset_name]
     dataset = load_dataset(
         "json",
         data_files=data_file,
+        split="train",
     )
+    if config.num_samples is not None:
+        dataset = dataset.select(range(min(len(dataset), config.num_samples)))
     # print(dataset.)
     dataset = dataset.map(prompn_fn, batched=False)
     return dataset

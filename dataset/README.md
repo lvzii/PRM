@@ -4,8 +4,6 @@
 
 ```
 testset_mid.json # testset's module id in raw dataset
-
-
 ```
 
 # 命名规则
