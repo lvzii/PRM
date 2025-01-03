@@ -1,88 +1,72 @@
+import json
+import os
 import nlpertools
-import argparse
+import concurrent.futures
+from tqdm import tqdm
+import time
+
+from prm.utils.api import aLLM
+from prm.utils.parse import process_response
+from eval_utils import get_prompt
 
 
-from src.prm.utils import score
-from src.prm.utils.data import get_dataset, save_dataset
-from src.prm.search import base, base_api, cot, rw
-from src.prm.config import Config
-
-STRATEGY_ALL = "all"
-STRATEGY_BASE = "base"
-STRATEGY_COT = "+cot"
-STRATEGY_RW = "+rw"
-
-TASK_PRF = "prf"
-TASK_PASS = "pass"
-TASK_THRESHOLD = "threshold"
-
-config = Config()
-
-
-def load_llm(config):
-    if config.engine == "vllm":
-        import torch
-        from vllm import LLM
-
-        llm = LLM(model=config.gen_model)
+def _get_dataset_path():
+    if DATASET == "syntax":
+        return "./dataset/verilog-machine-syntax-test.json"
+    elif DATASET == "function":
+        return "./dataset/verilog-machine-function-test.json"
     else:
-        from src.prm.utils.api import aLLM
-
-        llm = aLLM()
-    return llm
+        raise ValueError("DATASET must be syntax or function")
 
 
-def evaluate(args):
-    dataset, task, strategy, gen_model, rw_model = args.dataset, args.task, args.strategy, args.gen_model, args.rw_model
-    print(
-        f"Args\ndataset: {args.dataset}\ntask: {args.task}\nstrategy: {args.strategy}\ngen_model: {args.gen_model}\nrw_model: {args.rw_model}\n\nEvaluation started...\n"
-    )
-    # combine args & config
-    config.dataset = dataset
-    config.task = task
-    config.strategy = strategy
-    config.gen_model = gen_model
-    config.rw_model = rw_model
-
-    llm = load_llm(config)
-    dataset = get_dataset(dataset)
-
-    infer_fn = {"base": base if config.engine == "vllm" else base_api, "cot": cot, "rw": rw}[strategy]
-    if config.strategy != STRATEGY_RW:
-        dataset = dataset.map(infer_fn, fn_kwargs={"config": config, "llm": llm}, batched=True)
+def func(idx, i):
+    response = []
+    save_path = os.path.join(ROOT_DIR, f"{idx}.json")
+    if os.path.exists(save_path):
+        output = nlpertools.load_from_json(save_path)
+        response = output["response"]
+    for each in response:
+        # 去除之前失败的
+        if each:
+            response.append(each)
+    if len(response) == GENERATE_TIMES:
+        return output
     else:
-        prm = 1
-        dataset = dataset.map(infer_fn, fn_kwargs={"config": config, "llm": llm, "prm": prm}, batched=True)
+        generate_times = GENERATE_TIMES - len(response)
 
-    dataset = score(dataset, config)
-    save_dataset(dataset, config)
+    prompt = get_prompt(DATASET, STRATEGY, i)
+    for _ in range(generate_times):
+        response_content = allm.call(prompt, temperature=TEMPERATURE)
+        response_content = process_response(response_content)
+        if response_content:
+            response_json = json.loads(response_content)
+            response.append(response_json)
+    i["response"] = response
+    nlpertools.save_to_json(i, save_path)
+    return i
 
 
 if __name__ == "__main__":
+    DATASET = "syntax"
+    STRATEGY = "cot"
+    TEMPERATURE = 0.1
+    MAX_WORKERS = 64
+    GENERATE_TIMES = 20
+    ROOT_DIR = f"eval_result/res-{DATASET}-{STRATEGY}"
+    allm = aLLM(api_port=8001)
+    nlpertools.j_mkdir(ROOT_DIR)
 
-    parser = argparse.ArgumentParser(description="Evaluation script with different strategies and tasks.")
-    parser.add_argument("--dataset", type=str, help="dataset path", default="syntax")
-    parser.add_argument(
-        "--task",
-        choices=[TASK_PRF, TASK_PASS, TASK_THRESHOLD],
-        help="The task to execute (prf or downstream)",
-        default="pass",
-    )
-    parser.add_argument(
-        "--strategy",
-        choices=[STRATEGY_BASE, STRATEGY_COT, STRATEGY_RW],
-        help="The strategy to execute (base, +cot, or advanced)",
-        default="base",
-    )
+    while 1:
+        for GENERATE_TIMES in range(1, 21):
+            dataset_path = _get_dataset_path()
+            data = nlpertools.load_from_json(dataset_path)
+            new_data = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                futures = [executor.submit(func, idx, i) for idx, i in enumerate(data)]
+                for future in tqdm(concurrent.futures.as_completed(futures), total=len(data), desc="Processing"):
+                    new_data.append(future.result())
 
-    parser.add_argument(
-        "--gen_model", type=str, help="gen model path", default="/data/jiyoushu/hub/Qwen/Qwen2___5-Coder-7B-Instruct/"
-    )
-    parser.add_argument(
-        "--rw_model", type=str, help="rw model path", default="/data/jiyoushu/hub/Qwen/Qwen2___5-Coder-7B-Instruct/"
-    )
+            nlpertools.save_to_json(new_data, f"{ROOT_DIR}.json")
 
-    args = parser.parse_args()
-
-    evaluate(args)
-    # CUDA_VISIBLE_DEVICES=0,1,2,3 python eval.py function pass base /data/jiyoushu/hub/Qwen/Qwen2___5-Coder-7B-Instruct/ /data/jiyoushu/hub/Qwen/Qwen2___5-Coder-7B-Instruct/
+            print("over")
+            time.sleep(1)

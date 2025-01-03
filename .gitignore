@@ -4,6 +4,19 @@
 /archive/
 /src/prm.egg-info/
 __pycache__/
-/utils/
-data_gen/
-!data_gen/*.py
+# /utils/
+/output/
+
+/data_gen/
+!/data_gen/**/*/.py
+
+
+# temp
+data.ipynb
+demo.py
+utils/api.py
+utils/verilog_check.py
+utils/token_len_static.py
+dataset/verilog-machine-function-wo_cot.json
+*.png
+readme.md

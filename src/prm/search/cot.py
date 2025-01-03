@@ -55,7 +55,7 @@ def cot_api(x, config: Config, llm: aLLM):
         for _ in range(config.infer_times):
             try:
                 response = llm.call(i + ANSWER_REQUIREMENT)
-            except response as e:
+            except Exception as e:
                 continue
             # here to process response
             response = process_response(response)

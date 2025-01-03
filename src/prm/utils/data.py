@@ -60,5 +60,10 @@ def get_dataset(dataset_name, config):
     return dataset
 
 
+def complete_dataset():
+    dataset = load_dataset("json", data_files="./output/completions.json", split="train")
+    return dataset
+
+
 def save_dataset(dataset, config):
-    dataset.to_json(f"{config.output_dir}/completions.json")
+    dataset.to_json(f"{config.output_dir}/{config.task}-{config.dataset}-{config.strategy}.json")

@@ -29,4 +29,4 @@ class Config:
 
     # api
     api_port: int = 8001
-    api_max_workers: int = 64
+    api_max_workers: int = 40

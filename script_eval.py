@@ -4,13 +4,13 @@ import argparse
 
 from src.prm.utils import score
 from src.prm.utils.data import get_dataset, save_dataset
-from src.prm.search import base, cot, rw, base_api, cot_api, rw_api
+from src.prm.search import base, cot, rw, base_batch_api, cot_api, rw_api
 from src.prm.config import Config
 
 STRATEGY_ALL = "all"
 STRATEGY_BASE = "base"
-STRATEGY_COT = "+cot"
-STRATEGY_RW = "+rw"
+STRATEGY_COT = "cot"
+STRATEGY_RW = "rw"
 
 TASK_PRF = "prf"
 TASK_PASS = "pass"
@@ -46,13 +46,19 @@ def evaluate(args):
 
     llm = load_llm(config)
     dataset = get_dataset(dataset, config)
-    infer_fn = {"api": {"base": base_api, "cot": cot_api, "rw": rw_api}, "vllm": {"base": base, "cot": cot, "rw": rw}}[
-        config.engine
-    ][strategy]
+    infer_fn = {
+        "api": {"base": base_batch_api, "cot": cot_api, "rw": rw_api},
+        "vllm": {"base": base, "cot": cot, "rw": rw},
+    }[config.engine][strategy]
     if config.strategy != STRATEGY_RW:
         # network package conflict with multi-processing in dataset.map, so api mode can't set num_proc > 1
         dataset = dataset.map(
-            infer_fn, fn_kwargs={"config": config, "llm": llm}, batched=True, batch_size=100, num_proc=1
+            infer_fn,
+            fn_kwargs={"config": config, "llm": llm},
+            batched=True,
+            batch_size=20,
+            num_proc=1,
+            desc="Dataset Map INFER",
         )
     else:
         prm = 1
@@ -76,7 +82,7 @@ if __name__ == "__main__":
         "--strategy",
         choices=[STRATEGY_BASE, STRATEGY_COT, STRATEGY_RW],
         help="The strategy to execute (base, +cot, or advanced)",
-        default="base",
+        default=STRATEGY_COT,
     )
 
     parser.add_argument(

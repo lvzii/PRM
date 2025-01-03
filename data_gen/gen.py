@@ -1,3 +1,4 @@
+import argparse
 import random
 import sys
 import nlpertools
@@ -274,7 +275,7 @@ def label():
         # print("start check")
         # step 2 skip already success
         if Path(step_label_save_path).exists():
-            # print(f"pass {i["uid"]}-{i["source"]}")
+            print(f"skip label cot -- {i["uid"]}-{tdx}")
             return
         # step 3 construct check_prompt, from `false cot`
         check_prompt = construct_check_prompt(i)
@@ -348,6 +349,7 @@ def label():
                     # print("false")
                     check_func(i, tdx)
             else:
+                print(f"skip generate cot -- {i["uid"]}-{tdx}")
                 i = nlpertools.load_from_json(cot_save_path)
                 if i["answer_is_correct"]:
                     continue
@@ -424,12 +426,25 @@ def build_train_data():
 
 
 def back_data_real_time():
-    data = []
-    for dir_path in ["data_process-llama-3.1-instruct", "data_process-qwen_coder_2.5"]:
-        for path in nlpertools.listdir(dir_path):
-            cur = nlpertools.load_from_json(path)
-            data.append({"data": cur, "source": path})
-    nlpertools.save_to_json(data, "data_process-real-time.json")
+    # data = []
+    # for dir_path in ["data_process-llama-3.1-instruct", "data_process-qwen_coder_2.5"]:
+    #     for path in nlpertools.listdir(dir_path):
+    #         cur = nlpertools.load_from_json(path)
+    #         data.append({"data": cur, "source": path})
+    #     print(len(data))
+    # nlpertools.save_to_json(data, "data_process-real-time.json")
+
+    cot_data = []
+    for path in nlpertools.listdir("processing/cot/qwen_coder_2.5"):
+        cur = nlpertools.load_from_json(path)
+        cot_data.append({"data": cur, "source": path})
+    nlpertools.save_to_json(cot_data, "processing/cot-real-time.json")
+
+    label_data = []
+    for path in nlpertools.listdir("processing/label/qwen_coder_2.5"):
+        cur = nlpertools.load_from_json(path)
+        label_data.append({"data": cur, "source": path})
+    nlpertools.save_to_json(label_data, "processing/label-real-time.json")
 
 
 if __name__ == "__main__":
@@ -443,14 +458,33 @@ if __name__ == "__main__":
         base_url=f"http://localhost:{API_PORT}/v1",
         api_key="0",
     )
-    MAX_TRY_TIMES = 3
-    MAX_WORKERS = 32
+    MAX_TRY_TIMES = 20
+    MAX_WORKERS = 64
     COT_DIR = f"processing/cot/{MODEL}"
     UNIT_RESPONSE_DIR = f"processing/label/{MODEL}"
     nlpertools.j_mkdir(COT_DIR)
     nlpertools.j_mkdir(UNIT_RESPONSE_DIR)
     # RAW_DATA = "../raw_data/false_cot.json"
     RAW_DATA = "../dataset/verilog-machine-function-wo_cot.json"
-    label()
+    # label()
     # back_data_real_time()
     # build_train_data()
+
+    parser = argparse.ArgumentParser(description="Control.")
+    parser.add_argument("--generate_cot", action="store_true", help="Generate COT for Verilog")
+    parser.add_argument("--check_cot", action="store_true", help="Label COT's true/false")
+    parser.add_argument("--backup", action="store_true", help="Back up data in real-time")
+    parser.add_argument("--build_train", action="store_true", help="Build train dataset format")
+    args = parser.parse_args()
+    if args.generate_cot:
+        print("generate_cot")
+        label()
+    if args.build_train:
+        # build_train_data()
+        print("build_train")
+    if args.backup:
+        print("backup")
+        back_data_real_time()
+    if args.check_cot:
+        # label()
+        print("check_cot")

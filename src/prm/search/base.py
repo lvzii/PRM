@@ -43,7 +43,7 @@ def base(x, config: Config, llm: LLM):
     return x
 
 
-def base_api(x, config: Config, llm: aLLM):
+def base_batch_api(x, config: Config, llm: aLLM):
     """
     dataset
     because of multi-processing conflict with dataset.map, so we should implement multi-processing in this function
@@ -55,7 +55,7 @@ def base_api(x, config: Config, llm: aLLM):
         for _ in range(config.infer_times):
             try:
                 response = llm.call(i + ANSWER_REQUIREMENT)
-            except response as e:
+            except Exception as e:
                 continue
             # here to process response
             response = process_response(response)
